@@ -4,28 +4,105 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Sổ Sức Khỏe Điện Tử · VNeID · QĐ-BYT</title>
-<!-- Firebase SDK -->
-<script type="module" id="firebase-init">
-  // Firebase config - Personal Health Record
-  const FIREBASE_CFG = {
-    apiKey: "AIzaSyC4t5AlfiJLZp8_n1GeYnGjKh7eyN_R8fc",
-    authDomain: "personal-health-record-ef5d5.firebaseapp.com",
-    projectId: "personal-health-record-ef5d5",
-    storageBucket: "personal-health-record-ef5d5.firebasestorage.app",
-    messagingSenderId: "231619499777",
-    appId: "1:231619499777:web:42896ba616958733a66d00"
-  };
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-  const _fbApp = initializeApp(FIREBASE_CFG);
-  const _db    = getFirestore(_fbApp);
+<!-- Firebase REST API wrapper — không cần SDK, không có timing issue -->
+<script>
+(function() {
+  var PROJECT = "personal-health-record-ef5d5";
+  var API_KEY  = "AIzaSyC4t5AlfiJLZp8_n1GeYnGjKh7eyN_R8fc";
+  var BASE     = "https://firestore.googleapis.com/v1/projects/"+PROJECT+"/databases/(default)/documents/";
 
-  // Expose Firebase helpers lên window để Babel script dùng được
-  window._db = _db;
-  window._fbOps = { doc, setDoc, getDoc, deleteDoc, collection, getDocs, onSnapshot, query, where };
+  // Chuyển Firestore REST document → object JS thường
+  function fromFirestore(fields) {
+    if (!fields) return null;
+    var obj = {};
+    Object.keys(fields).forEach(function(k) {
+      var v = fields[k];
+      if (v.stringValue  !== undefined) obj[k] = v.stringValue;
+      else if (v.integerValue !== undefined) obj[k] = Number(v.integerValue);
+      else if (v.booleanValue !== undefined) obj[k] = v.booleanValue;
+      else if (v.nullValue !== undefined) obj[k] = null;
+      else if (v.mapValue) obj[k] = fromFirestore(v.mapValue.fields);
+      else if (v.arrayValue) obj[k] = (v.arrayValue.values||[]).map(function(x){ return fromFirestore({_:x})._; });
+      else obj[k] = JSON.stringify(v);
+    });
+    return obj;
+  }
+
+  // Chuyển object JS → Firestore REST fields
+  function toFirestore(obj) {
+    var fields = {};
+    Object.keys(obj).forEach(function(k) {
+      var v = obj[k];
+      if (v === null || v === undefined) fields[k] = {nullValue: null};
+      else if (typeof v === "boolean") fields[k] = {booleanValue: v};
+      else if (typeof v === "number") fields[k] = Number.isInteger(v) ? {integerValue: ""+v} : {doubleValue: v};
+      else if (typeof v === "string") fields[k] = {stringValue: v};
+      else if (Array.isArray(v)) fields[k] = {arrayValue: {values: v.map(function(x){ return toFirestore({_:x})._.fields ? toFirestore({_:x}) : {stringValue:JSON.stringify(x)}; })}};
+      else if (typeof v === "object") fields[k] = {mapValue: {fields: toFirestore(v)}};
+      else fields[k] = {stringValue: String(v)};
+    });
+    return fields;
+  }
+
+  // REST: GET (đọc 1 doc)
+  async function restGet(col, docId) {
+    try {
+      var r = await fetch(BASE+col+"/"+docId+"?key="+API_KEY);
+      if (!r.ok) return null;
+      var d = await r.json();
+      return d.fields ? fromFirestore(d.fields) : null;
+    } catch(e) { return null; }
+  }
+
+  // REST: SET (ghi/merge)
+  async function restSet(col, docId, data) {
+    try {
+      var fields = toFirestore(data);
+      var fieldPaths = Object.keys(fields).map(function(k){ return "updateMask.fieldPaths="+encodeURIComponent(k); }).join("&");
+      var url = BASE+col+"/"+docId+"?key="+API_KEY+"&"+fieldPaths;
+      var r = await fetch(url, {
+        method: "PATCH",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({fields: fields})
+      });
+      return r.ok;
+    } catch(e) { console.warn("restSet error:", e); return false; }
+  }
+
+  // REST: DELETE
+  async function restDel(col, docId) {
+    try {
+      await fetch(BASE+col+"/"+docId+"?key="+API_KEY, {method:"DELETE"});
+    } catch(e) {}
+  }
+
+  // REST: LIST (lấy tất cả docs trong collection)
+  async function restGetAll(col) {
+    try {
+      var r = await fetch(BASE+col+"?key="+API_KEY+"&pageSize=100");
+      if (!r.ok) return [];
+      var d = await r.json();
+      return (d.documents||[]).map(function(doc) {
+        var id = doc.name.split("/").pop();
+        return Object.assign({id: id}, fromFirestore(doc.fields||{}));
+      });
+    } catch(e) { console.warn("restGetAll error:", e); return []; }
+  }
+
+  // Expose lên window
   window._fbReady = true;
-  window.dispatchEvent(new Event("firebase-ready"));
-  console.log("✅ Firebase Firestore connected");
+  window._fbRest = { get: restGet, set: restSet, del: restDel, getAll: restGetAll };
+  console.log("Firebase REST API ready");
+
+  // Dispatch firebase-ready sau DOM load
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function() {
+      window.dispatchEvent(new Event("firebase-ready"));
+    });
+  } else {
+    setTimeout(function(){ window.dispatchEvent(new Event("firebase-ready")); }, 100);
+  }
+})();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -2626,40 +2703,78 @@ const userDataKey = (uid) => `phr_data_${uid}`;
 //  FIREBASE SYNC LAYER — đồng bộ Firestore thay localStorage
 //  localStorage vẫn dùng làm cache offline
 // ══════════════════════════════════════════════════════════════
-const db = () => window._db;
-const fb = () => window._fbOps;
+// Firebase REST API dùng window._fbRest trực tiếp
 
-// Ghi document vào Firestore (async, không block UI)
-const fsSet = async (collection, docId, data) => {
-  if (!db()) return;
-  try {
-    await fb().setDoc(fb().doc(db(), collection, docId), data, {merge: true});
-  } catch(e) { console.warn("fsSet error:", e.message); }
+// Ghi document qua REST API
+const fsSet = async (col, docId, data) => {
+  if (!window._fbRest) return;
+  await window._fbRest.set(col, docId, data);
 };
 
-// Đọc document từ Firestore
+// Đọc document qua REST API
 const fsGet = async (col, docId) => {
-  if (!db()) return null;
-  try {
-    const snap = await fb().getDoc(fb().doc(db(), col, docId));
-    return snap.exists() ? snap.data() : null;
-  } catch(e) { console.warn("fsGet error:", e.message); return null; }
+  if (!window._fbRest) return null;
+  return await window._fbRest.get(col, docId);
 };
 
-// Xóa document
+// Xóa document qua REST API
 const fsDel = async (col, docId) => {
-  if (!db()) return;
-  try { await fb().deleteDoc(fb().doc(db(), col, docId)); }
-  catch(e) { console.warn("fsDel error:", e.message); }
+  if (!window._fbRest) return;
+  await window._fbRest.del(col, docId);
 };
 
-// Lấy tất cả documents trong collection
+// Lấy tất cả documents qua REST API
 const fsGetAll = async (col) => {
-  if (!db()) return [];
+  if (!window._fbRest) return [];
+  return await window._fbRest.getAll(col);
+};
+
+// ── Migrate toàn bộ localStorage lên Firebase (chạy 1 lần) ──
+const migrateLocalToFirebase = async () => {
+  if (!window._fbRest) { alert("Firebase chua ket noi!"); return; }
+  let count = 0;
   try {
-    const snap = await fb().getDocs(fb().collection(db(), col));
-    return snap.docs.map(d => ({id: d.id, ...d.data()}));
-  } catch(e) { console.warn("fsGetAll error:", e.message); return []; }
+    // Users
+    const index = JSON.parse(localStorage.getItem(LS_PREFIX.replace("phr_user_","") ? "phr_user_index" : "phr_user_index") || "[]");
+    const userIndex = JSON.parse(localStorage.getItem("phr_user_index") || "[]");
+    for (const uid of userIndex) {
+      const raw = localStorage.getItem("phr_user_"+uid);
+      if (raw) {
+        const {user, data} = JSON.parse(raw);
+        if (user && user.uid && user.uid !== DEMO_USER.uid) {
+          await fsSet("users", uid, {user: JSON.stringify(user), data: JSON.stringify(data||{}), updatedAt: new Date().toISOString()});
+          count++;
+        }
+      }
+    }
+    // Doctors
+    const docIndex = JSON.parse(localStorage.getItem("phr_doctor_index") || "[]");
+    for (const uid of docIndex) {
+      const raw = localStorage.getItem("phr_doctor_"+uid);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && d.uid) { await fsSet("doctors", uid, {...d, updatedAt: new Date().toISOString()}); count++; }
+      }
+    }
+    // Consults
+    const allKeys = Object.keys(localStorage);
+    for (const k of allKeys) {
+      if (k.startsWith("phr_consult_")) {
+        const patUid = k.replace("phr_consult_","");
+        const consults = JSON.parse(localStorage.getItem(k) || "[]");
+        if (consults.length > 0) { await fsSet("consults", patUid, {consults: JSON.stringify(consults), updatedAt: new Date().toISOString()}); count++; }
+      }
+      if (k.startsWith("phr_crequest_")) {
+        const patUid = k.replace("phr_crequest_","");
+        const reqs = JSON.parse(localStorage.getItem(k) || "[]");
+        if (reqs.length > 0) { await fsSet("requests", patUid, {requests: JSON.stringify(reqs), updatedAt: new Date().toISOString()}); count++; }
+      }
+    }
+    alert("Da dong bo "+count+" ban ghi len Firebase! Lan sau mo tren may nao cung co du du lieu.");
+  } catch(e) {
+    alert("❌ Lỗi đồng bộ: "+e.message);
+    console.error(e);
+  }
 };
 
 // Sync indicator
@@ -2669,10 +2784,16 @@ const syncDone  = () => { _syncPending = Math.max(0,_syncPending-1); if(!_syncPe
 
 // ── Firebase-backed saveUserToLS ──────────────────────────────
 const saveUserToFirebase = async (uid, user, data) => {
+  if (!uid || !user) return;
   syncStart();
   try {
-    await fsSet("users", uid, {user: JSON.stringify(user), data: JSON.stringify(data||{}), updatedAt: new Date().toISOString()});
-  } finally { syncDone(); }
+    await fsSet("users", uid, {
+      user: JSON.stringify(user),
+      data: JSON.stringify(data||{}),
+      updatedAt: new Date().toISOString()
+    });
+  } catch(e) { console.warn("saveUser Firebase error:", e); }
+  finally { syncDone(); }
 };
 
 // ── Firebase-backed saveDoctorToLS ────────────────────────────
@@ -2701,7 +2822,7 @@ const saveRequestsToFirebase = async (patientUid, reqs) => {
 
 // ── Load toàn bộ data từ Firebase khi app khởi động ──────────
 const loadAllFromFirebase = async () => {
-  if (!db()) return false;
+  if (!window._fbRest) return false;
   try {
     console.log("🔄 Loading data from Firebase...");
     // Load users
@@ -5056,6 +5177,11 @@ const AdminPanel = ({onLogout}) => {
     setEditUser(null); refreshUsers();
   };
   const doDelete = (uid) => { delete USER_DB[uid]; delete SESSION_DATA[uid]; removeUserFromLS(uid); setConfirmDel(null); refreshUsers(); };
+  const doMigrate = () => {
+    if (window.confirm("Dong bo toan bo du lieu tu may nay len Firebase? (Chay 1 lan khi chuyen sang GitHub Pages)")) {
+      migrateLocalToFirebase();
+    }
+  };
   const doResetPwd = () => {
     if(!newPwd||newPwd.length<6){alert("Mật khẩu tối thiểu 6 ký tự");return;}
     USER_DB[resetPwdUser.uid] = {...USER_DB[resetPwdUser.uid], passwordHash: hashPass(newPwd)};
@@ -5197,6 +5323,10 @@ ${users.map((u,i)=>`<tr><td>${i+1}</td><td>${u.displayName||"—"}</td><td>${u.b
         </div>
         <div style={{flex:1}}/>
         <div style={{fontSize:12,color:"#94a3b8"}}>👤 Quản trị viên</div>
+        <button onClick={()=>{if(window.confirm("Đồng bộ dữ liệu máy này lên Firebase? (Chạy 1 lần khi mới chuyển sang GitHub Pages)"))migrateLocalToFirebase();}}
+          style={{padding:"6px 14px",background:"rgba(245,158,11,0.2)",color:"#fcd34d",border:"1px solid rgba(245,158,11,0.3)",borderRadius:7,fontSize:12,cursor:"pointer",marginRight:4}}>
+          ☁️ Migrate → Firebase
+        </button>
         <button onClick={onLogout}
           style={{padding:"6px 14px",background:"rgba(220,38,38,0.2)",color:"#fca5a5",border:"1px solid rgba(220,38,38,0.3)",borderRadius:7,fontSize:12,cursor:"pointer"}}>
           🚪 Đăng xuất
