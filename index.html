@@ -4,6 +4,29 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Sổ Sức Khỏe Điện Tử · VNeID · QĐ-BYT</title>
+<!-- Firebase SDK -->
+<script type="module" id="firebase-init">
+  // Firebase config - Personal Health Record
+  const FIREBASE_CFG = {
+    apiKey: "AIzaSyC4t5AlfiJLZp8_n1GeYnGjKh7eyN_R8fc",
+    authDomain: "personal-health-record-ef5d5.firebaseapp.com",
+    projectId: "personal-health-record-ef5d5",
+    storageBucket: "personal-health-record-ef5d5.firebasestorage.app",
+    messagingSenderId: "231619499777",
+    appId: "1:231619499777:web:42896ba616958733a66d00"
+  };
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  const _fbApp = initializeApp(FIREBASE_CFG);
+  const _db    = getFirestore(_fbApp);
+
+  // Expose Firebase helpers lên window để Babel script dùng được
+  window._db = _db;
+  window._fbOps = { doc, setDoc, getDoc, deleteDoc, collection, getDocs, onSnapshot, query, where };
+  window._fbReady = true;
+  window.dispatchEvent(new Event("firebase-ready"));
+  console.log("✅ Firebase Firestore connected");
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -2072,37 +2095,41 @@ const SummaryPage = ({data}) => {
   const genAI = async () => {
     setLoading(true);setErr("");setAiText("");
     try {
-      const context = `== HỒ SƠ SỨC KHỎE ĐIỆN TỬ (QĐ 1332/QĐ-BYT) ==
-BN: ${p.fullName||"Chưa rõ"} | ${age}t${ageM?ageM+"th":""} | ${p.gender||"?"} | Nhóm máu ${p.bloodType||"?"} | BHYT: ${p.bhyt||"?"}
-Địa chỉ: ${[p.diaChiQuanHuyen,p.diaChiTinhTP].filter(Boolean).join(", ")||"Chưa có"}
-Tiền sử: ${p.tienSuBanThan||"Chưa ghi nhận"}
-
-I. PHẪU THUẬT / THỦ THUẬT (Module X)
-${ptList.map(pt=>`- ${pt.datetime}: ${pt.procedureName} | Mã: ${pt.procedureCode||"N/A"} | ${pt.result||""}`).join("\n")||"Chưa có"}
-
-II. CHỈ SỐ SỐNG (Lần gần nhất ${latestVital?fmt(latestVital.date):"N/A"})
-${latestVital?`Chiều cao: ${latestVital.height}cm | Cân nặng: ${latestVital.weight}kg | BMI: ${latestVital.bmi}
-SpO2: ${latestVital.spo2||"?"}% | Nhịp tim: ${latestVital.heartRate||"?"}l/ph | HA: ${latestVital.bloodPressureSys||"?"}/${latestVital.bloodPressureDia||"?"}mmHg`:"Chưa có dữ liệu"}
-
-III. CẬN LÂM SÀNG gần nhất
-${latestLab?`${latestLab.panelName} (${fmt(latestLab.date)}):\n${latestLab.items.map(i=>`  ${i.name}: ${i.value}${i.unit||""}${i.isAbnormal?" ⚠️":""}`).join("\n")}`:"Chưa có"}
-
-IV. THUỐC ĐANG DÙNG
-${active.map(m=>`- ${m.name}: ${m.dosage} — ${m.reason||""}`).join("\n")||"Không có"}
-
-V. DỊ ỨNG: ${allergyAlert}
-VI. TIÊM CHỦNG: ${vaccines?.length||0} mũi
-
-VII. LỊCH SỬ KCB GẦN ĐÂY
-${recentKCB.map(e=>`- ${fmt(e.date)}: ${e.chanDoan||e.title} | BS: ${e.doctor||"N/A"} | KQ: ${e.ketQuaDieuTri||"N/A"}`).join("\n")||"Chưa có"}
-
-== YÊU CẦU ==
-Hãy viết tóm tắt hồ sơ bệnh án điện tử theo chuẩn BYT gồm:
-1. Tóm tắt bệnh sử và can thiệp đã thực hiện
-2. Tình trạng hiện tại và các vấn đề cần theo dõi
-3. Thuốc và phác đồ đang áp dụng
-4. Khuyến nghị theo dõi và tái khám
-Viết bằng tiếng Việt, rõ ràng, khách quan.`;
+      const ctxLines = [
+        "== HO SO SUC KHOE DIEN TU (QD 1332/QD-BYT) ==",
+        "BN: "+(p.fullName||"Chua ro")+" | "+age+"t"+(ageM?ageM+"th":"")+" | "+(p.gender||"?")+" | Nhom mau "+(p.bloodType||"?"),
+        "Dia chi: "+([p.diaChiQuanHuyen,p.diaChiTinhTP].filter(Boolean).join(", ")||"Chua co"),
+        "Tien su: "+(p.tienSuBanThan||"Chua ghi nhan"),
+        "",
+        "I. PHAU THUAT / THU THUAT ("+ptList.length+" lan):",
+      ];
+      ptList.forEach(pt=>ctxLines.push("- "+(pt.datetime||"?")+" "+pt.procedureName+" | Ma: "+(pt.procedureCode||"N/A")+" | KQ: "+(pt.result||"?")));
+      ctxLines.push("");
+      ctxLines.push("II. CHI SO SONG (Lan gan nhat "+(latestVital?fmt(latestVital.date):"N/A")+"):");
+      if(latestVital) ctxLines.push("CC: "+(latestVital.height||"?")+"cm | CN: "+(latestVital.weight||"?")+"kg | SpO2: "+(latestVital.spo2||"?")+"% | M: "+(latestVital.heartRate||"?")+"l/ph | HA: "+(latestVital.bloodPressureSys||"?")+"/"+(latestVital.bloodPressureDia||"?"));
+      ctxLines.push("");
+      ctxLines.push("III. CAN LAM SANG gan nhat:");
+      if(latestLab){ ctxLines.push(latestLab.panelName+" ("+fmt(latestLab.date)+"):"); (latestLab.items||[]).forEach(it=>ctxLines.push("  "+it.name+": "+it.value+(it.unit||"")+(it.isAbnormal?" [BAT THUONG]":""))); }
+      else ctxLines.push("Chua co");
+      ctxLines.push("");
+      ctxLines.push("IV. THUOC DANG DUNG:");
+      active.forEach(m=>ctxLines.push("- "+m.name+": "+m.dosage+" — "+(m.reason||"")));
+      if(!active.length) ctxLines.push("Khong co");
+      ctxLines.push("");
+      ctxLines.push("V. DI UNG: "+allergyAlert);
+      ctxLines.push("VI. TIEM CHUNG: "+((vaccines||[]).length)+" mui");
+      ctxLines.push("");
+      ctxLines.push("VII. LICH SU KCB GAN DAY:");
+      recentKCB.forEach(e=>ctxLines.push("- "+fmt(e.date)+": "+(e.chanDoan||e.title)+" | BS: "+(e.doctor||"N/A")));
+      ctxLines.push("");
+      ctxLines.push("== YEU CAU ==");
+      ctxLines.push("Hay viet tom tat ho so benh an dien tu theo chuan BYT gom:");
+      ctxLines.push("1. Tom tat benh su va can thiep da thuc hien");
+      ctxLines.push("2. Tinh trang hien tai va cac van de can theo doi");
+      ctxLines.push("3. Thuoc va phac do dang ap dung");
+      ctxLines.push("4. Khuyen nghi theo doi va tai kham");
+      ctxLines.push("Viet bang tieng Viet, ro rang, khach quan.");
+      const context = ctxLines.join("\n");
       const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:context}]})});
       const d = await res.json();
       if(d.content?.[0]?.text) setAiText(d.content[0].text);
@@ -2207,53 +2234,32 @@ const SmartUploadPage = ({setEvents, setLabs, setImaging, profile}) => {
     const age = profile?.dateOfBirth ? Math.floor((Date.now()-new Date(profile.dateOfBirth))/(365.25*24*3600*1000)) : "";
     const name = profile?.fullName || "";
 
-    const prompt = `Bạn là trợ lý y tế đọc tài liệu tiếng Việt. Trả về CHỈ JSON, không có text nào khác.
-
-THÔNG TIN BỆNH NHÂN HỒ SƠ CẦN KIỂM TRA:
-- Họ tên: ${name}
-- Ngày sinh: ${dob} (${age} tuổi)
-- Giới tính: ${profile?.gender || "?"}
-- Nhóm máu: ${profile?.bloodType || "?"}
-
-Trả về JSON với cấu trúc:
-{
-  "category": "labs|imaging|event|medication",
-  "confidence": 0-100,
-  "date": "YYYY-MM-DD hoặc null",
-  "facility": "tên cơ sở",
-  "doctor": "tên bác sĩ",
-  "title": "tiêu đề ngắn",
-  "diagnosis": "chẩn đoán chính",
-  "notes": "ghi chú",
-  "labItems": [{"name":"","value":"","unit":"","refRange":"","isAbnormal":false}],
-  "imagingType": "ULTRASOUND|CT|XRAY|MRI|ECG|OTHER",
-  "imagingConclusion": "kết luận hình ảnh",
-  "eventType": "VISIT|HOSPITALIZATION|SURGERY|VACCINATION|OTHER",
-  "summary": "tóm tắt 1-2 câu",
-  "patientCheck": {
-    "nameInDoc": "tên BN trong tài liệu hoặc null nếu không có",
-    "dobInDoc": "ngày sinh/tuổi trong tài liệu hoặc null",
-    "genderInDoc": "giới tính trong tài liệu hoặc null",
-    "nameMatch": true,
-    "dobMatch": true,
-    "hasMismatch": false,
-    "mismatchDetails": "Mô tả rõ điểm không khớp. Ví dụ: Tên tài liệu là 'Nguyễn Văn A' nhưng hồ sơ là '${name}'. Để trống nếu khớp hoặc không có thông tin."
-  }
-}
-
-QUY TẮC KIỂM TRA (QUAN TRỌNG):
-- Tài liệu CÓ tên bệnh nhân + tên KHÁC "${name}" → nameMatch=false, hasMismatch=true
-- Tài liệu CÓ ngày sinh/tuổi + KHÁC ${dob}/${age}t → dobMatch=false, hasMismatch=true  
-- Tên viết tắt/không dấu/hoa vẫn khớp nếu rõ ràng cùng người
-- Không có thông tin BN trong tài liệu → nameMatch=true, dobMatch=true, hasMismatch=false
-- Khi hasMismatch=true: MÔ TẢ RÕ RÀNG trong mismatchDetails (tên trong tài liệu là gì, hồ sơ là gì)
-
-PHÂN LOẠI:
-- Siêu âm, XN máu, sinh hóa → labs
-- X-quang, CT, MRI, ECG → imaging
-- Phiếu khám, toa thuốc, xuất viện → event
-- isAbnormal=true nếu ngoài khoảng bình thường
-- Tim mạch nhi: EF>55%, TP<25mmHg, TAPSE>17mm`;
+    const promptParts = [
+      "Ban la tro ly y te doc tai lieu tieng Viet. Tra ve CHI JSON, khong co markdown, khong co giai thich.",
+      "",
+      "THONG TIN BENH NHAN HO SO CAN KIEM TRA:",
+      "- Ho ten: "+name,
+      "- Ngay sinh: "+dob+" ("+age+" tuoi)",
+      "- Gioi tinh: "+(profile?.gender||"?"),
+      "- Nhom mau: "+(profile?.bloodType||"?"),
+      "",
+      "Tra ve JSON voi cau truc:",
+      '{"category":"labs|imaging|event|medication","confidence":0-100,"date":"YYYY-MM-DD","facility":"ten co so","doctor":"ten bac si","title":"tieu de ngan","diagnosis":"chan doan chinh","notes":"ghi chu",',
+      '"labItems":[{"name":"","value":"","unit":"","refRange":"","isAbnormal":false}],',
+      '"imagingType":"ULTRASOUND|CT|XRAY|MRI|ECG|OTHER","imagingConclusion":"ket luan hinh anh",',
+      '"eventType":"VISIT|HOSPITALIZATION|SURGERY|VACCINATION|OTHER","summary":"tom tat 1-2 cau",',
+      '"patientCheck":{"nameInDoc":"ten BN trong tai lieu","dobInDoc":"ngay sinh","genderInDoc":"gioi tinh","nameMatch":true,"dobMatch":true,"hasMismatch":false,"mismatchDetails":"mo ta"}}',
+      "",
+      "QUY TAC KIEM TRA BENH NHAN:",
+      "- So sanh ten/ngay sinh/gioi tinh trong tai lieu voi thong tin ho so",
+      "- Neu tai lieu khong co ten BN: nameInDoc=null, nameMatch=true",
+      "- Neu ten khac nhau ro rang: hasMismatch=true",
+      "",
+      "TIEU CHUAN GIA TRI BINH THUONG (tre em):",
+      "- Huyet hoc: Hb>11g/dL, BC 4-10K, TC 150-400K",
+      "- Tim mach nhi: EF>55%, TP<25mmHg, TAPSE>17mm",
+    ];
+    const prompt = promptParts.join("\n");
 
     const msgContent = isPDF
       ? [{type:"document",source:{type:"base64",media_type:"application/pdf",data:base64}},{type:"text",text:prompt}]
@@ -2580,7 +2586,7 @@ PHÂN LOẠI:
           ))}
         </div>
       )}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 };
@@ -2615,6 +2621,137 @@ const DEMO_USER = {
 
 // Storage key cho mỗi user
 const userDataKey = (uid) => `phr_data_${uid}`;
+
+// ══════════════════════════════════════════════════════════════
+//  FIREBASE SYNC LAYER — đồng bộ Firestore thay localStorage
+//  localStorage vẫn dùng làm cache offline
+// ══════════════════════════════════════════════════════════════
+const db = () => window._db;
+const fb = () => window._fbOps;
+
+// Ghi document vào Firestore (async, không block UI)
+const fsSet = async (collection, docId, data) => {
+  if (!db()) return;
+  try {
+    await fb().setDoc(fb().doc(db(), collection, docId), data, {merge: true});
+  } catch(e) { console.warn("fsSet error:", e.message); }
+};
+
+// Đọc document từ Firestore
+const fsGet = async (col, docId) => {
+  if (!db()) return null;
+  try {
+    const snap = await fb().getDoc(fb().doc(db(), col, docId));
+    return snap.exists() ? snap.data() : null;
+  } catch(e) { console.warn("fsGet error:", e.message); return null; }
+};
+
+// Xóa document
+const fsDel = async (col, docId) => {
+  if (!db()) return;
+  try { await fb().deleteDoc(fb().doc(db(), col, docId)); }
+  catch(e) { console.warn("fsDel error:", e.message); }
+};
+
+// Lấy tất cả documents trong collection
+const fsGetAll = async (col) => {
+  if (!db()) return [];
+  try {
+    const snap = await fb().getDocs(fb().collection(db(), col));
+    return snap.docs.map(d => ({id: d.id, ...d.data()}));
+  } catch(e) { console.warn("fsGetAll error:", e.message); return []; }
+};
+
+// Sync indicator
+let _syncPending = 0;
+const syncStart = () => { _syncPending++; window._syncStatus && window._syncStatus(true); };
+const syncDone  = () => { _syncPending = Math.max(0,_syncPending-1); if(!_syncPending) window._syncStatus && window._syncStatus(false); };
+
+// ── Firebase-backed saveUserToLS ──────────────────────────────
+const saveUserToFirebase = async (uid, user, data) => {
+  syncStart();
+  try {
+    await fsSet("users", uid, {user: JSON.stringify(user), data: JSON.stringify(data||{}), updatedAt: new Date().toISOString()});
+  } finally { syncDone(); }
+};
+
+// ── Firebase-backed saveDoctorToLS ────────────────────────────
+const saveDoctorToFirebase = async (doc_data) => {
+  syncStart();
+  try {
+    await fsSet("doctors", doc_data.uid, {...doc_data, updatedAt: new Date().toISOString()});
+  } finally { syncDone(); }
+};
+
+// ── Firebase-backed saveConsultsToLS ─────────────────────────
+const saveConsultsToFirebase = async (patientUid, consults) => {
+  syncStart();
+  try {
+    await fsSet("consults", patientUid, {consults: JSON.stringify(consults), updatedAt: new Date().toISOString()});
+  } finally { syncDone(); }
+};
+
+// ── Firebase-backed saveRequestsToLS ─────────────────────────
+const saveRequestsToFirebase = async (patientUid, reqs) => {
+  syncStart();
+  try {
+    await fsSet("requests", patientUid, {requests: JSON.stringify(reqs), updatedAt: new Date().toISOString()});
+  } finally { syncDone(); }
+};
+
+// ── Load toàn bộ data từ Firebase khi app khởi động ──────────
+const loadAllFromFirebase = async () => {
+  if (!db()) return false;
+  try {
+    console.log("🔄 Loading data from Firebase...");
+    // Load users
+    const users = await fsGetAll("users");
+    users.forEach(item => {
+      try {
+        const user = JSON.parse(item.user || "{}");
+        const data = JSON.parse(item.data || "{}");
+        if (user.uid && user.uid !== DEMO_USER.uid && user.uid !== "admin_system") {
+          USER_DB[user.uid] = user;
+          SESSION_DATA[user.uid] = data;
+          // Cũng lưu vào localStorage làm cache
+          try { localStorage.setItem(LS_PREFIX+user.uid, JSON.stringify({user,data})); } catch(e){}
+        }
+      } catch(e) {}
+    });
+    // Load doctors
+    const docs = await fsGetAll("doctors");
+    docs.forEach(d => {
+      if (d.uid) {
+        DOCTOR_DB[d.uid] = d;
+        try { localStorage.setItem(LS_DOCTOR_PREFIX+d.uid, JSON.stringify(d)); } catch(e){}
+      }
+    });
+    // Load consults
+    const consultItems = await fsGetAll("consults");
+    consultItems.forEach(item => {
+      try {
+        const consults = JSON.parse(item.consults || "[]");
+        const patUid = item.id;
+        try { localStorage.setItem(LS_CONSULT_PREFIX+patUid, JSON.stringify(consults)); } catch(e){}
+        if (SESSION_DATA[patUid]) SESSION_DATA[patUid].consults = consults;
+      } catch(e) {}
+    });
+    // Load requests
+    const reqItems = await fsGetAll("requests");
+    reqItems.forEach(item => {
+      try {
+        const reqs = JSON.parse(item.requests || "[]");
+        const patUid = item.id;
+        try { localStorage.setItem(LS_CREQUEST_PREFIX+patUid, JSON.stringify(reqs)); } catch(e){}
+      } catch(e) {}
+    });
+    console.log("✅ Firebase data loaded:", users.length, "users,", docs.length, "doctors");
+    return true;
+  } catch(e) {
+    console.warn("Firebase load failed, using localStorage:", e.message);
+    return false;
+  }
+};
 
 // Load/save user data từ memory (không dùng localStorage)
 let USER_DB = { [DEMO_USER.uid]: DEMO_USER };
@@ -3175,7 +3312,30 @@ const RegisterScreen = ({onSuccess, onLogin, onBack}) => {
 // ── Doctor DB (lưu trong localStorage riêng) ─────────────────
 const LS_DOCTOR_PREFIX = "phr_doctor_";
 const LS_DOCTOR_INDEX  = "phr_doctor_index";
-const LS_CONSULT_PREFIX = "phr_consult_"; // consults per patient uid
+const LS_CONSULT_PREFIX  = "phr_consult_";    // consults per patient uid
+const LS_CREQUEST_PREFIX = "phr_crequest_"; // consultation requests per patient uid
+
+const saveRequestsToLS = (patientUid, reqs) => {
+  try { localStorage.setItem(LS_CREQUEST_PREFIX+patientUid, JSON.stringify(reqs)); } catch(e) {}
+  // Sync to Firebase
+  saveRequestsToFirebase(patientUid, reqs);
+};
+const loadRequestsFromLS = (patientUid) => {
+  try { return JSON.parse(localStorage.getItem(LS_CREQUEST_PREFIX+patientUid)||"[]"); } catch(e) { return []; }
+};
+// Load tất cả requests của TẤT CẢ bệnh nhân (cho bác sĩ xem)
+const loadAllRequests = () => {
+  const all = [];
+  try {
+    const keys = Object.keys(localStorage).filter(k=>k.startsWith(LS_CREQUEST_PREFIX));
+    keys.forEach(k => {
+      const uid = k.replace(LS_CREQUEST_PREFIX,"");
+      const reqs = JSON.parse(localStorage.getItem(k)||"[]");
+      reqs.forEach(r => all.push({...r, patientUid: uid}));
+    });
+  } catch(e) {}
+  return all.sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||""));
+};
 
 const DOCTOR_DB = {}; // uid → doctorUser
 
@@ -3197,6 +3357,8 @@ const saveDoctorToLS = (doc) => {
     localStorage.setItem(LS_DOCTOR_PREFIX+doc.uid, JSON.stringify(doc));
     const idx = JSON.parse(localStorage.getItem(LS_DOCTOR_INDEX)||"[]");
     if (!idx.includes(doc.uid)) { idx.push(doc.uid); localStorage.setItem(LS_DOCTOR_INDEX, JSON.stringify(idx)); }
+    // Sync to Firebase
+    saveDoctorToFirebase(doc);
   } catch(e) {}
 };
 
@@ -3205,12 +3367,15 @@ const removeDoctorFromLS = (uid) => {
     localStorage.removeItem(LS_DOCTOR_PREFIX+uid);
     const idx = JSON.parse(localStorage.getItem(LS_DOCTOR_INDEX)||"[]");
     localStorage.setItem(LS_DOCTOR_INDEX, JSON.stringify(idx.filter(x=>x!==uid)));
+    fsDel("doctors", uid);
   } catch(e) {}
 };
 
 // Lưu/đọc consults theo patient uid
 const saveConsultsToLS = (patientUid, consults) => {
   try { localStorage.setItem(LS_CONSULT_PREFIX+patientUid, JSON.stringify(consults)); } catch(e) {}
+  // Sync to Firebase
+  saveConsultsToFirebase(patientUid, consults);
 };
 const loadConsultsFromLS = (patientUid) => {
   try { return JSON.parse(localStorage.getItem(LS_CONSULT_PREFIX+patientUid)||"[]"); } catch(e) { return []; }
@@ -3277,35 +3442,53 @@ const DoctorLoginScreen = ({onSuccess, onRegister, onBack}) => {
 
 // ── DoctorRegisterScreen ──────────────────────────────────────
 const DoctorRegisterScreen = ({onBack}) => {
-  const [form, setForm] = React.useState({
-    fullName:"", licenseNumber:"", specialty:"", workplace:"",
-    email:"", phone:"", pwd:"", pwd2:""
-  });
-  const [err, setErr] = React.useState("");
-  const [done, setDone] = React.useState(false);
-  const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
+  const [fullName,   setFullName]   = React.useState("");
+  const [license,    setLicense]    = React.useState("");
+  const [specialty,  setSpecialty]  = React.useState("");
+  const [workplace,  setWorkplace]  = React.useState("");
+  const [email,      setEmail]      = React.useState("");
+  const [phone,      setPhone]      = React.useState("");
+  const [pwd,        setPwd]        = React.useState("");
+  const [pwd2,       setPwd2]       = React.useState("");
+  const [err,        setErr]        = React.useState("");
+  const [done,       setDone]       = React.useState(false);
+
+  const inp = (label, val, setter, opts={}) => (
+    <div style={{marginBottom:12}}>
+      <label style={{fontSize:11,fontWeight:700,color:"#374151",display:"block",marginBottom:3}}>
+        {label}{opts.required&&<span style={{color:"#dc2626"}}>*</span>}
+      </label>
+      <input
+        type={opts.type||"text"}
+        value={val}
+        onChange={e=>setter(e.target.value)}
+        placeholder={opts.placeholder||""}
+        style={{width:"100%",padding:"8px 11px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:12,outline:"none",boxSizing:"border-box"}}
+      />
+    </div>
+  );
 
   const doRegister = () => {
     setErr("");
-    if (!form.fullName||!form.licenseNumber||!form.pwd) { setErr("Vui lòng điền đầy đủ thông tin bắt buộc (*)"); return; }
-    if (form.pwd !== form.pwd2) { setErr("Mật khẩu xác nhận không khớp"); return; }
-    if (form.pwd.length < 6) { setErr("Mật khẩu tối thiểu 6 ký tự"); return; }
-    if (Object.values(DOCTOR_DB).find(d=>d.licenseNumber===form.licenseNumber.trim())) {
+    if (!fullName.trim()||!license.trim()||!pwd) { setErr("Vui lòng điền đầy đủ thông tin bắt buộc (*)"); return; }
+    if (pwd !== pwd2) { setErr("Mật khẩu xác nhận không khớp"); return; }
+    if (pwd.length < 6) { setErr("Mật khẩu tối thiểu 6 ký tự"); return; }
+    if (Object.values(DOCTOR_DB).find(d=>d.licenseNumber===license.trim())) {
       setErr("Mã CCHN này đã được đăng ký"); return;
     }
     const uid = "doc_" + Date.now();
     const doc = {
       uid, role:"doctor", isDoctor:true,
-      fullName: form.fullName.trim(),
-      licenseNumber: form.licenseNumber.trim(),
-      specialty: form.specialty.trim(),
-      workplace: form.workplace.trim(),
-      email: form.email.trim().toLowerCase(),
-      phone: form.phone.trim(),
-      passwordHash: hashPass(form.pwd),
-      status: "pending", // chờ admin duyệt
+      fullName: fullName.trim(),
+      licenseNumber: license.trim(),
+      specialty: specialty.trim(),
+      workplace: workplace.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      passwordHash: hashPass(pwd),
+      status: "pending",
       createdAt: new Date().toISOString().slice(0,10),
-      accessiblePatients: [], // danh sách patientUid được phép xem
+      accessiblePatients: [],
     };
     DOCTOR_DB[uid] = doc;
     saveDoctorToLS(doc);
@@ -3323,14 +3506,6 @@ const DoctorRegisterScreen = ({onBack}) => {
     </div>
   );
 
-  const Inp = ({label, k, type="text", placeholder="", required=false}) => (
-    <div style={{marginBottom:12}}>
-      <label style={{fontSize:11,fontWeight:700,color:"#374151",display:"block",marginBottom:3}}>{label}{required&&<span style={{color:"#dc2626"}}>*</span>}</label>
-      <input type={type} value={form[k]} onChange={set(k)} placeholder={placeholder}
-        style={{width:"100%",padding:"8px 11px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
-    </div>
-  );
-
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div style={{background:"white",borderRadius:20,padding:28,maxWidth:440,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
@@ -3340,14 +3515,14 @@ const DoctorRegisterScreen = ({onBack}) => {
           <p style={{fontSize:11,color:"#64748b",margin:0}}>Sau khi đăng ký Admin sẽ xét duyệt và cấp quyền truy cập hồ sơ</p>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
-          <div style={{gridColumn:"1/-1"}}><Inp label="Họ và tên bác sĩ" k="fullName" required placeholder="BS. Nguyễn Văn A"/></div>
-          <Inp label="Mã CCHN" k="licenseNumber" required placeholder="001-2-240123"/>
-          <Inp label="Chuyên khoa" k="specialty" placeholder="Tim mạch nhi, Nhi khoa..."/>
-          <div style={{gridColumn:"1/-1"}}><Inp label="Nơi công tác" k="workplace" placeholder="BV Nhi Đồng 1 / PK gia đình..."/></div>
-          <Inp label="Email" k="email" type="email" placeholder="bsnguyena@gmail.com"/>
-          <Inp label="Số điện thoại" k="phone" placeholder="0909xxxxxx"/>
-          <Inp label="Mật khẩu" k="pwd" type="password" required placeholder="Tối thiểu 6 ký tự"/>
-          <Inp label="Xác nhận mật khẩu" k="pwd2" type="password" required placeholder="Nhập lại mật khẩu"/>
+          <div style={{gridColumn:"1/-1"}}>{inp("Họ và tên bác sĩ", fullName, setFullName, {required:true, placeholder:"BS. Nguyễn Văn A"})}</div>
+          {inp("Mã CCHN", license, setLicense, {required:true, placeholder:"001-2-240123"})}
+          {inp("Chuyên khoa", specialty, setSpecialty, {placeholder:"Tim mạch nhi, Nhi khoa..."})}
+          <div style={{gridColumn:"1/-1"}}>{inp("Nơi công tác", workplace, setWorkplace, {placeholder:"BV Nhi Đồng 1 / PK gia đình..."})}</div>
+          {inp("Email", email, setEmail, {type:"email", placeholder:"bsnguyena@gmail.com"})}
+          {inp("Số điện thoại", phone, setPhone, {placeholder:"0909xxxxxx"})}
+          {inp("Mật khẩu", pwd, setPwd, {type:"password", required:true, placeholder:"Tối thiểu 6 ký tự"})}
+          {inp("Xác nhận mật khẩu", pwd2, setPwd2, {type:"password", required:true, placeholder:"Nhập lại mật khẩu"})}
         </div>
         {err && <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#dc2626"}}>⚠️ {err}</div>}
         <div style={{display:"flex",gap:8,marginTop:4}}>
@@ -3366,8 +3541,15 @@ const DoctorApp = ({doctor, onLogout}) => {
   const [consults, setConsults] = React.useState([]);
   const [newMsg, setNewMsg] = React.useState("");
   const [docPage, setDocPage] = React.useState("overview"); // overview|events|labs|imaging|meds|vitals|consult
-  const [saving, setSaving] = React.useState(false);
-  const [savedOk, setSavedOk] = React.useState(false);
+  const [saving,    setSaving]    = React.useState(false);
+  const [savedOk,   setSavedOk]   = React.useState(false);
+  const [allRequests,  setAllRequests]  = React.useState(loadAllRequests()); // yêu cầu từ BN
+  const [aiLoading,    setAiLoading]    = React.useState(false);
+  const [aiSummary,    setAiSummary]    = React.useState("");
+  const [aiErr,        setAiErr]        = React.useState("");
+  const [aiDraft,      setAiDraft]      = React.useState("");
+  const [draftEditing, setDraftEditing] = React.useState(false); // đang soạn thảo
+  const [showPdf,      setShowPdf]      = React.useState(false); // preview PDF
   const fmt = d => d ? new Date(d).toLocaleDateString("vi-VN") : "—";
 
   // Load patient khi chọn
@@ -3384,6 +3566,254 @@ const DoctorApp = ({doctor, onLogout}) => {
     }
     setPatientData(d);
     setConsults(loadConsultsFromLS(uid));
+    setAllRequests(loadAllRequests());
+    setAiSummary(""); setAiErr(""); setAiDraft(""); setDraftEditing(false); setNewMsg(""); setShowPdf(false);
+  };
+
+  // ── Tạo context hồ sơ cho AI ───────────────────────────────
+  const buildPatientContext = () => {
+    if (!patientData) return "";
+    const pr = patientData.profile || {};
+    const ev = patientData.events || [];
+    const lb = patientData.labs || [];
+    const im = patientData.imaging || [];
+    const md = patientData.medications || [];
+    const vt = patientData.vitals || [];
+    const al = patientData.allergies || [];
+    const pt = patientData.procedures || [];
+    const dob = pr.dateOfBirth ? new Date(pr.dateOfBirth) : null;
+    const age = dob ? Math.floor((Date.now()-dob)/(365.25*24*3600*1000)) : "?";
+    const ageM = dob ? Math.floor(((Date.now()-dob)/(365.25*24*3600*1000)%1)*12) : "";
+    const fD = d => d ? new Date(d).toLocaleDateString("vi-VN") : "?";
+    const srt = arr => [...arr].sort((a,b)=>(b.date||b.datetime||"").localeCompare(a.date||a.datetime||""));
+    const NL = "\n";
+
+    const lines = [];
+    lines.push("== HO SO SUC KHOE BENH NHAN ==");
+    lines.push("Ho ten: "+(pr.fullName||"?")+" | "+age+"t"+(ageM?ageM+"th":"")+" | "+(pr.gender||"?")+" | Nhom mau: "+(pr.bloodType||"?")+" | BHYT: "+(pr.bhyt||"?"));
+    lines.push("Dia chi: "+([pr.diaChiQuanHuyen,pr.diaChiTinhTP].filter(Boolean).join(", ")||"?"));
+    lines.push("Tien su ban than: "+(pr.tienSuBanThan||"Chua ghi nhan"));
+    lines.push("Tien su gia dinh: "+(pr.tienSuGiaDinh||"Chua ghi nhan"));
+    lines.push("");
+
+    lines.push("== DI UNG ("+al.length+") ==");
+    if (al.length===0) lines.push("Khong co");
+    else al.forEach(a=>lines.push("- "+a.allergen+" ["+a.severity+"]: "+(a.symptoms||"")));
+    lines.push("");
+
+    lines.push("== PHAU THUAT / THU THUAT ("+pt.length+") ==");
+    if (pt.length===0) lines.push("Chua co");
+    else srt(pt).forEach(p=>{
+      lines.push("- "+fD(p.datetime)+": "+p.procedureName+" tai "+(p.facility||"?")+" (BS. "+(p.doctor||"?")+")");
+      lines.push("  Ket qua: "+(p.result||"?")+" | Bien chung: "+(p.complications||"khong"));
+    });
+    lines.push("");
+
+    lines.push("== DOT KCB GAN NHAT ("+ev.length+" dot, hien thi 5 gan nhat) ==");
+    if (ev.length===0) lines.push("Chua co");
+    else srt(ev).slice(0,5).forEach(e=>{
+      lines.push("- "+fD(e.date)+": "+(e.title||e.chanDoan||"?")+" tai "+(e.facility||"?"));
+      lines.push("  CD: "+(e.chanDoan||"?")+" | ICD: "+(e.maICD10||"?")+" | Dieu tri: "+(e.tomTatPPDieuTri||e.tomTatBenhSu||"?"));
+    });
+    lines.push("");
+
+    lines.push("== XET NGHIEM GAN NHAT ==");
+    const recentLabs = srt(lb).slice(0,2);
+    if (recentLabs.length===0) lines.push("Chua co");
+    else recentLabs.forEach(l=>{
+      lines.push(l.panelName+" ("+fD(l.date)+"):");
+      (l.items||[]).forEach(it=>lines.push("  "+it.name+": "+it.value+(it.unit||"")+" (BT:"+(it.refRange||"?")+") "+(it.isAbnormal?"[BAT THUONG]":"")));
+    });
+    lines.push("");
+
+    lines.push("== CDHA GAN NHAT ==");
+    const recentIm = srt(im).slice(0,2);
+    if (recentIm.length===0) lines.push("Chua co");
+    else recentIm.forEach(i=>{ lines.push("- "+fD(i.date)+": "+i.title+" ("+i.type+")"); lines.push("  Ket luan: "+(i.conclusion||"?")); });
+    lines.push("");
+
+    lines.push("== THUOC DANG DUNG ==");
+    const activeMeds = md.filter(m=>m.isActive);
+    if (activeMeds.length===0) lines.push("Khong co");
+    else activeMeds.forEach(m=>lines.push("- "+m.name+" "+m.dosage+" "+m.frequency+" ("+( m.reason||"?")+")"));
+    lines.push("");
+
+    lines.push("== CHI SO SK GAN NHAT ==");
+    const lv = srt(vt)[0];
+    if (!lv) lines.push("Chua co");
+    else lines.push(fD(lv.date)+": CC "+(lv.height||"?")+"cm CN "+(lv.weight||"?")+"kg SpO2 "+(lv.spo2||"?")+"% M "+(lv.heartRate||"?")+"l/ph HA "+(lv.bloodPressureSys||"?")+"/"+(lv.bloodPressureDia||"?")+" T "+(lv.temperature||"?")+"°C");
+    lines.push("");
+
+    lines.push("== TU VAN CU ("+consults.length+") ==");
+    const recentC = [...consults].slice(-3);
+    if (recentC.length===0) lines.push("Chua co");
+    else recentC.forEach(c=>lines.push("["+new Date(c.createdAt).toLocaleDateString("vi-VN")+"] BS."+c.doctorName+": "+c.message.slice(0,200)));
+
+    return lines.join("\n");
+  };
+
+  // ── Gọi AI tóm tắt toàn bộ hồ sơ ────────────────────────────
+  const genAISummary = async () => {
+    setAiLoading(true); setAiErr(""); setAiSummary("");
+    try {
+      const ctx = buildPatientContext();
+      const prompt = [
+        "Phan tich toan dien ho so benh nhan sau va cung cap:",
+        "1. TOM TAT TINH TRANG — Chan doan chinh, tien trien, muc do",
+        "2. DIEM DANG CHU Y — Ket qua bat thuong, xu huong xau di/tot len",
+        "3. THUOC & TUONG TAC — Danh gia phac do hien tai, co do",
+        "4. KHUYEN NGHI THEO DOI — Xet nghiem/CDHA can thuc hien, tan suat tai kham",
+        "5. CAU HOI GOI Y — 3-5 cau hoi bac si nen hoi BN/gia dinh khi gap",
+        "",
+        ctx
+      ].join("\n");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:2000,
+          system:"Ban la AI ho tro bac si danh gia ho so benh nhan. Phan tich khach quan, ngan gon, dung chuyen mon. Tra loi bang tieng Viet, dung markdown voi cac muc ro rang.",
+          messages:[{role:"user", content:prompt}]
+        })
+      });
+      if (!res.ok) throw new Error("API "+res.status);
+      const data = await res.json();
+      setAiSummary((data.content||[]).map(b=>b.text||"").join("").trim());
+    } catch(e) {
+      setAiErr(e.message||"Loi khong xac dinh");
+    }
+    setAiLoading(false);
+  };
+
+  const DISCLAIMER = "\n\n---\n⚠️ LƯU Ý QUAN TRỌNG: Nội dung thư tư vấn này do AI tổng hợp/đề xuất dựa trên dữ liệu hồ sơ được cung cấp. Thông tin có thể không đầy đủ hoặc không chính xác. Bác sĩ chịu trách nhiệm chuyên môn và cần xem xét kỹ, chỉnh sửa theo nhận định lâm sàng thực tế trước khi gửi cho gia đình bệnh nhân.";
+
+  const genAIDraft = async () => {
+    setAiLoading(true); setAiErr(""); setAiDraft("");
+    try {
+      const ctx = buildPatientContext();
+      const today = new Date().toLocaleDateString("vi-VN");
+      const prompt = [
+        "Soan thao 'THU TU VAN SUC KHOE' (khong ghi tieu de nay vao thu, tu van su dung tieu de: Thu Tu Van Suc Khoe) gui cho gia dinh benh nhan.",
+        "Thu ngan gon 200-300 tu, gom 4 phan chinh:",
+        "1. TINH TRANG HIEN TAI: Tom tat dua tren ho so (neu ro day la tong hop tu ho so, co the thieu thong tin)",
+        "2. NHUNG DIEM CAN LUU Y: Cac dau hieu can theo doi tai nha",
+        "3. KHUYEN NGHI: Tai kham, xet nghiem tiep theo (ghi ro day la de xuat, bac si se quyet dinh)",
+        "4. LOI DONG VIEN: Ngan gon, chan thanh",
+        "",
+        "Bac si ky ten: "+doctor.fullName+" | "+( doctor.specialty||"")+" | "+(doctor.workplace||"")+" | Ngay: "+today,
+        "",
+        ctx
+      ].join("\n");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:1800,
+          system:"Ban la AI ho tro soan thao 'Thu Tu Van Suc Khoe' bang tieng Viet cho gia dinh benh nhan nhi. Van phong chuyen nghiep, am ap, de hieu. KHONG tu y them chan doan hay ket luan y te ngoai du lieu ho so. KHONG dung tieu de 'Thu Tu Van Suc Khoe' trong noi dung - chi soan noi dung thu. KHONG them disclaimer vao thu vi se them o ngoai.",
+          messages:[{role:"user", content:prompt}]
+        })
+      });
+      if (!res.ok) throw new Error("API "+res.status);
+      const data = await res.json();
+      const draft = (data.content||[]).map(b=>b.text||"").join("").trim();
+      // Thêm disclaimer bắt buộc
+      setAiDraft(draft + DISCLAIMER);
+      setNewMsg(draft + DISCLAIMER);
+      setDraftEditing(true);
+      setDocPage("consult");
+    } catch(e) {
+      setAiErr(e.message||"Loi khong xac dinh");
+    }
+    setAiLoading(false);
+  };
+
+  // ── Export PDF thu tu van ──────────────────────────────────────
+  const exportConsultPDF = (msgText) => {
+    const today = new Date().toLocaleDateString("vi-VN");
+    const p = patientData?.profile || {};
+    const dobStr = p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString("vi-VN") : "?";
+    const age = p.dateOfBirth ? Math.floor((Date.now()-new Date(p.dateOfBirth))/(365.25*24*3600*1000)) : "?";
+    const discIdx = msgText.indexOf("\n\n---\n");
+    const mainContent = discIdx >= 0 ? msgText.slice(0, discIdx) : msgText;
+    const fmtContent = mainContent.split("\n").map(function(l) {
+      if (!l.trim()) return "<br/>";
+      if (l.match(/^\d+\./)) return "<p style=\"margin:6px 0;font-weight:600\">"+l+"</p>";
+      l = l.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      return "<p style=\"margin:4px 0\">"+l+"</p>";
+    }).join("");
+    const css = [
+      "body{font-family:'Times New Roman',serif;font-size:13pt;margin:0;padding:0;color:#1a1a1a}",
+      ".page{width:21cm;min-height:29.7cm;margin:0 auto;padding:2.5cm 2.5cm 3cm;box-sizing:border-box}",
+      ".hdr{text-align:center;border-bottom:2px solid #0c4a6e;padding-bottom:14px;margin-bottom:20px}",
+      ".hdr h1{font-size:16pt;color:#0c4a6e;margin:0 0 4px;text-transform:uppercase;letter-spacing:1px}",
+      ".hdr p{font-size:10pt;color:#64748b;margin:2px 0}",
+      ".ptbox{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:10px 14px;margin-bottom:18px}",
+      ".ptbox table{width:100%;border-collapse:collapse;font-size:11pt}",
+      ".ptbox td{padding:3px 8px;vertical-align:top}",
+      ".ptbox td:first-child{font-weight:bold;color:#0c4a6e;width:140px}",
+      ".content{font-size:12pt;line-height:1.8;min-height:300px}",
+      ".disc{margin-top:24px;padding:10px 14px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;font-size:9pt;color:#713f12;line-height:1.5}",
+      ".sig{margin-top:32px;display:flex;justify-content:flex-end}",
+      ".sigbox{text-align:center;min-width:220px}",
+      ".sigbox .title{font-weight:bold;font-size:11pt;color:#0c4a6e}",
+      ".sigbox .line{border-top:1.5px solid #334155;margin-top:60px;padding-top:6px}",
+      ".sigbox .name{font-size:13pt;font-weight:bold;color:#0f172a}",
+      ".sigbox .detail{font-size:10pt;color:#64748b}",
+      "@media print{.page{margin:0;padding:2cm 2.5cm 3cm}body{-webkit-print-color-adjust:exact}}"
+    ].join("\n");
+    const rows = [
+      "<tr><td>B\u1ec7nh nh\u00e2n:</td><td><strong>"+(p.fullName||"?")+"</strong></td><td>Ng\u00e0y sinh:</td><td>"+dobStr+" ("+age+" tu\u1ed5i)</td></tr>",
+      "<tr><td>Gi\u1edbi t\u00ednh:</td><td>"+(p.gender||"?")+"</td><td>Nh\u00f3m m\u00e1u:</td><td>"+(p.bloodType||"?")+"</td></tr>",
+      "<tr><td>BHYT:</td><td>"+(p.bhyt||"?")+"</td><td></td><td></td></tr>"
+    ].join("");
+    const sigLines = [
+      "<div class=\"title\">B\u00e1c s\u0129 t\u01b0 v\u1ea5n</div>",
+      "<div class=\"line\">",
+      "<div class=\"name\">"+doctor.fullName+"</div>",
+      "<div class=\"detail\">"+(doctor.specialty||"")+"</div>",
+      "<div class=\"detail\">"+(doctor.workplace||"")+"</div>",
+      "<div class=\"detail\">CCHN: "+doctor.licenseNumber+"</div>",
+      "</div>"
+    ].join("");
+    const htmlParts = [
+      "<!DOCTYPE html><html><head><meta charset='UTF-8'>",
+      "<style>"+css+"</style></head><body>",
+      "<div class='page'>",
+      "<div class='hdr'>",
+      "<h1>Th\u01b0 T\u01b0 V\u1ea5n S\u1ee9c Kh\u1ecfe</h1>",
+      "<p>D\u1ef1a tr\u00ean h\u1ed3 s\u01a1 \u0111i\u1ec7n t\u1eed \u0111\u01b0\u1ee3c cung c\u1ea5p v\u00e0 kinh nghi\u1ec7m th\u1ef1c ti\u1ec5n</p>",
+      "<p style='color:#94a3b8;font-size:9pt'>Ng\u00e0y: "+today+"</p>",
+      "</div>",
+      "<div class='ptbox'><table>"+rows+"</table></div>",
+      "<div class='content'>"+fmtContent+"</div>",
+      "<div class='disc'>",
+      "<strong>&#9888; LÙU Ý QUAN TRỌNG:</strong> Nọi dung thŭ tŭ ván này do AI tỏng họp/đè xuát dụa trên dữ liẹu hô sõ được cung cáp. Thóng tin có thẻ không đày đủ hoạc không chính xác. Bác sĩ chịu trách nhiẹm chuyên môn và đã xác nhạn nọi dung này trưóc khi ký tên.",
+      "</div>",
+      "<div class='sig'><div class='sigbox'>"+sigLines+"</div></div>",
+      "</div></body></html>"
+    ].join("");
+    // Dùng blob URL tránh popup bị chặn
+    const blob = new Blob([htmlParts], {type:"text/html;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:21cm;height:29.7cm;border:none;";
+    document.body.appendChild(iframe);
+    iframe.onload = function() {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch(e) {
+        window.open(url, "_blank");
+      }
+      setTimeout(function(){ document.body.removeChild(iframe); URL.revokeObjectURL(url); }, 3000);
+    };
+    iframe.src = url;
+  };
+
+  // Đánh dấu yêu cầu tư vấn BN là đã xử lý
+  const markRequestAnswered = (reqId, patientUid) => {
+    const reqs = loadRequestsFromLS(patientUid);
+    const updated = reqs.map(r => r.id===reqId ? {...r, status:"answered", answeredAt: new Date().toISOString(), answeredBy: doctor.fullName} : r);
+    saveRequestsToLS(patientUid, updated);
+    setAllRequests(loadAllRequests());
   };
 
   const sendConsult = () => {
@@ -3527,12 +3957,16 @@ const DoctorApp = ({doctor, onLogout}) => {
             <div style={{background:"white",borderRadius:12,border:"1px solid #e0f2fe",overflow:"hidden",marginBottom:16}}>
               <div style={{display:"flex",borderBottom:"1px solid #e0f2fe",overflowX:"auto",padding:"0 4px",flexWrap:"nowrap"}}>
                 <NavBtn id="overview" label="Tổng quan" emoji="📋"/>
+                <NavBtn id="aisummary" label="AI Đánh giá" emoji="🤖"/>
                 <NavBtn id="events"   label={`Đợt KCB (${(patientData?.events||[]).length})`} emoji="🏥"/>
                 <NavBtn id="labs"     label={`XN/SA (${(patientData?.labs||[]).length})`} emoji="🔬"/>
                 <NavBtn id="imaging"  label={`CĐHA (${(patientData?.imaging||[]).length})`} emoji="📷"/>
                 <NavBtn id="meds"     label={`Thuốc (${(patientData?.medications||[]).filter(m=>m.isActive).length} active)`} emoji="💊"/>
                 <NavBtn id="vitals"   label={`Chỉ số (${(patientData?.vitals||[]).length})`} emoji="📊"/>
-                <NavBtn id="consult"  label={`Tư vấn (${consults.length})`} emoji="💬"/>
+                {(()=>{
+                  const pendingCount = allRequests.filter(r=>r.patientUid===selPatientUid&&r.status==="pending").length;
+                  return <NavBtn id="consult" label={"Tư vấn ("+(consults.length)+")"+(pendingCount>0?" 🔴"+pendingCount:"")} emoji="💬"/>;
+                })()}
               </div>
 
               <div style={{padding:18,maxHeight:520,overflowY:"auto"}}>
@@ -3590,6 +4024,87 @@ const DoctorApp = ({doctor, onLogout}) => {
                 )}
 
                 {/* Events */}
+                {/* ── AI SUMMARY TAB ── */}
+                {docPage==="aisummary" && (
+                  <div>
+                    {/* Action buttons */}
+                    <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                      <button onClick={genAISummary} disabled={aiLoading}
+                        style={{padding:"10px 20px",background:aiLoading?"#e2e8f0":"linear-gradient(135deg,#7c3aed,#6d28d9)",
+                          color:aiLoading?"#94a3b8":"white",border:"none",borderRadius:10,fontSize:13,fontWeight:700,
+                          cursor:aiLoading?"not-allowed":"pointer",boxShadow:aiLoading?"none":"0 4px 14px rgba(124,58,237,0.3)",
+                          display:"flex",alignItems:"center",gap:8}}>
+                        {aiLoading?"⏳ AI đang phân tích...":"🤖 Phân tích toàn diện hồ sơ"}
+                      </button>
+                      <button onClick={genAIDraft} disabled={aiLoading}
+                        style={{padding:"10px 20px",background:aiLoading?"#e2e8f0":"linear-gradient(135deg,#0369a1,#0284c7)",
+                          color:aiLoading?"#94a3b8":"white",border:"none",borderRadius:10,fontSize:13,fontWeight:700,
+                          cursor:aiLoading?"not-allowed":"pointer",boxShadow:aiLoading?"none":"0 4px 14px rgba(3,105,161,0.3)",
+                          display:"flex",alignItems:"center",gap:8}}>
+                        {aiLoading?"⏳ Đang soạn...":"✍️ Soạn tư vấn tự động"}
+                      </button>
+                    </div>
+
+                    {aiErr&&(
+                      <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#dc2626"}}>
+                        ❌ {aiErr}
+                      </div>
+                    )}
+
+                    {/* Loading animation */}
+                    {aiLoading&&(
+                      <div style={{background:"linear-gradient(135deg,#1e1b4b,#312e81)",borderRadius:14,padding:28,textAlign:"center",color:"white"}}>
+                        <div style={{fontSize:40,marginBottom:10,animation:"pulse 1.5s infinite"}}>🤖</div>
+                        <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>AI đang đọc hồ sơ bệnh nhân...</div>
+                        <div style={{fontSize:12,color:"#a5b4fc"}}>Phân tích đợt KCB, xét nghiệm, thuốc và lịch sử điều trị</div>
+                      </div>
+                    )}
+
+                    {/* AI Summary result */}
+                    {!aiLoading&&aiSummary&&(
+                      <div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                          <div style={{fontSize:11,fontWeight:700,color:"#7c3aed"}}>🤖 KẾT QUẢ PHÂN TÍCH AI</div>
+                          <div style={{display:"flex",gap:6}}>
+                            <button onClick={()=>{setNewMsg(aiSummary+"\n\n---\n*Tom tat AI ho tro - BS. "+doctor.fullName+" can xac nhan*");setDocPage("consult");}}
+                              style={{padding:"4px 12px",background:"#eff6ff",color:"#0369a1",border:"1px solid #bfdbfe",borderRadius:7,fontSize:11,cursor:"pointer",fontWeight:600}}>
+                              📋 Đưa vào tư vấn
+                            </button>
+                            <button onClick={()=>setAiSummary("")}
+                              style={{padding:"4px 10px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:7,fontSize:11,cursor:"pointer"}}>
+                              ✕ Xoá
+                            </button>
+                          </div>
+                        </div>
+                        {/* Render markdown-like */}
+                        <div style={{background:"white",border:"1px solid #e0e7ff",borderRadius:12,padding:"16px 18px",fontSize:13,lineHeight:1.8,color:"#1e1b4b"}}>
+                          {aiSummary.split("\n").map((line,i)=>{
+                            if (line.startsWith("## ")) return <h3 key={i} style={{fontWeight:800,fontSize:14,color:"#4c1d95",margin:"14px 0 6px",borderBottom:"1px solid #e0e7ff",paddingBottom:4}}>{line.replace(/^##\s*/,"")}</h3>;
+                            if (line.startsWith("### ")) return <h4 key={i} style={{fontWeight:700,fontSize:13,color:"#5b21b6",margin:"10px 0 4px"}}>{line.replace(/^###\s*/,"")}</h4>;
+                            if (line.startsWith("**") && line.endsWith("**")) return <div key={i} style={{fontWeight:700,color:"#1e1b4b",margin:"8px 0 3px"}}>{line.replace(/\*\*/g,"")}</div>;
+                            if (line.match(/^\*\*.*\*\*/)) return <div key={i} style={{margin:"3px 0"}} dangerouslySetInnerHTML={{__html:line.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/^- /,"• ")}}></div>;
+                            if (line.startsWith("- ") || line.startsWith("• ")) return <div key={i} style={{paddingLeft:16,margin:"2px 0",color:"#374151"}}>• {line.replace(/^[-•]\s*/,"")}</div>;
+                            if (line.trim()==="") return <div key={i} style={{height:8}}/>;
+                            return <div key={i} style={{margin:"2px 0"}}>{line}</div>;
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Placeholder khi chưa chạy */}
+                    {!aiLoading&&!aiSummary&&!aiErr&&(
+                      <div style={{background:"#faf5ff",border:"2px dashed #c4b5fd",borderRadius:14,padding:"36px 24px",textAlign:"center"}}>
+                        <div style={{fontSize:48,marginBottom:12}}>🤖</div>
+                        <div style={{fontSize:15,fontWeight:700,color:"#4c1d95",marginBottom:8}}>AI hỗ trợ đánh giá bệnh án</div>
+                        <div style={{fontSize:12,color:"#7c3aed",lineHeight:1.7,maxWidth:360,margin:"0 auto"}}>
+                          Nhấn <strong>"Phân tích toàn diện"</strong> để AI tóm tắt tình trạng, chỉ ra điểm bất thường và gợi ý theo dõi.<br/>
+                          Hoặc <strong>"Soạn tư vấn tự động"</strong> để AI tạo sẵn bản thảo tư vấn cho gia đình.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {docPage==="events" && (
                   <div>
                     {(patientData?.events||[]).length===0
@@ -3702,42 +4217,154 @@ const DoctorApp = ({doctor, onLogout}) => {
                 {/* Consult — gửi tư vấn */}
                 {docPage==="consult" && (
                   <div>
+                    {/* Banner soạn AI */}
+                    {!draftEditing&&(
+                      <div style={{background:"linear-gradient(135deg,#0c4a6e,#0369a1)",borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                        <div style={{color:"white"}}>
+                          <div style={{fontWeight:700,fontSize:13}}>✍️ Thư Tư Vấn Sức Khỏe</div>
+                          <div style={{fontSize:11,color:"#bae6fd",marginTop:2}}>AI soạn bản thảo · Bác sĩ chỉnh sửa · Xuất PDF có chữ ký</div>
+                        </div>
+                        <button onClick={genAIDraft} disabled={aiLoading}
+                          style={{flexShrink:0,padding:"8px 16px",background:"white",color:"#0369a1",border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                          {aiLoading?"⏳ Đang soạn...":"🤖 Tạo bản thảo"}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Draft editing */}
+                    {draftEditing&&(
+                      <div style={{background:"white",border:"2px solid #0369a1",borderRadius:14,padding:16,marginBottom:14}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                          <div>
+                            <div style={{fontWeight:800,fontSize:14,color:"#0c4a6e"}}>📝 Thư Tư Vấn Sức Khỏe</div>
+                            <div style={{fontSize:11,color:"#64748b",marginTop:1}}>Dựa trên hồ sơ được cung cấp và kinh nghiệm thực tiễn</div>
+                          </div>
+                          <button onClick={()=>{setDraftEditing(false);setNewMsg("");setAiDraft("");}}
+                            style={{padding:"4px 10px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:7,fontSize:11,cursor:"pointer"}}>
+                            ✕ Huỷ
+                          </button>
+                        </div>
+                        <div style={{background:"#fefce8",border:"1.5px solid #fbbf24",borderRadius:9,padding:"10px 14px",marginBottom:12,fontSize:11,color:"#713f12",lineHeight:1.6}}>
+                          <strong>⚠️ CẢNH BÁO Y ĐỨC — BẮT BUỘC ĐỌC TRƯỚC KHI GỬI:</strong><br/>
+                          Nội dung này do AI tổng hợp/đề xuất từ dữ liệu hồ sơ. Có thể <strong>không đầy đủ hoặc không chính xác</strong>. Bác sĩ chịu trách nhiệm chuyên môn, phải xem xét kỹ và chỉnh sửa theo nhận định lâm sàng thực tế trước khi ký tên gửi cho gia đình.
+                        </div>
+                        <textarea value={newMsg} onChange={e=>setNewMsg(e.target.value)}
+                          style={{width:"100%",minHeight:280,padding:"12px 14px",border:"1.5px solid #bfdbfe",borderRadius:9,fontSize:13,
+                            fontFamily:"'Times New Roman',serif",lineHeight:1.8,resize:"vertical",outline:"none",boxSizing:"border-box",color:"#0f172a",background:"#fafcff"}}/>
+                        <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",marginTop:10,marginBottom:12,fontSize:11}}>
+                          <strong style={{color:"#166534"}}>Chữ ký PDF:</strong>
+                          <span style={{color:"#374151",marginLeft:6}}>BS. {doctor.fullName} · {doctor.specialty||""} · {doctor.workplace||""} · CCHN: {doctor.licenseNumber}</span>
+                        </div>
+                        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <button onClick={()=>exportConsultPDF(newMsg)}
+                            style={{flex:1,minWidth:140,padding:"10px 16px",background:"linear-gradient(135deg,#dc2626,#b91c1c)",color:"white",
+                              border:"none",borderRadius:9,fontSize:13,fontWeight:700,cursor:"pointer",
+                              boxShadow:"0 4px 14px rgba(220,38,38,0.3)",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                            📄 Xuất PDF có chữ ký
+                          </button>
+                          <button onClick={()=>{if(window.confirm("Xác nhận đã đọc kỹ nội dung?"))sendConsult();}}
+                            disabled={!newMsg.trim()||saving}
+                            style={{flex:1,minWidth:140,padding:"10px 16px",background:newMsg.trim()?"linear-gradient(135deg,#0369a1,#0284c7)":"#e2e8f0",
+                              color:newMsg.trim()?"white":"#94a3b8",border:"none",borderRadius:9,fontSize:13,fontWeight:700,
+                              cursor:newMsg.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                            {savedOk?"✅ Đã lưu":saving?"⏳...":"📤 Lưu vào hồ sơ"}
+                          </button>
+                          <button onClick={genAIDraft} disabled={aiLoading}
+                            style={{padding:"10px 14px",background:"#f1f5f9",color:"#374151",border:"1px solid #e2e8f0",borderRadius:9,fontSize:12,cursor:"pointer"}}>
+                            🔄 Soạn lại
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Yêu cầu tư vấn từ BN */}
+                    {(()=>{
+                      const myReqs = allRequests.filter(r=>r.patientUid===selPatientUid);
+                      const pending = myReqs.filter(r=>r.status==="pending");
+                      const answered = myReqs.filter(r=>r.status==="answered");
+                      if(myReqs.length===0) return null;
+                      return (
+                        <div style={{marginBottom:16}}>
+                          <div style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:8}}>
+                            Yêu cầu tư vấn từ bệnh nhân ({myReqs.length})
+                          </div>
+                          {pending.map((r,i)=>(
+                            <div key={r.id||i} style={{background:"#fff5f5",border:"1.5px solid #fca5a5",borderLeft:"4px solid #dc2626",borderRadius:10,padding:"12px 14px",marginBottom:8}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                                <div>
+                                  <span style={{fontWeight:700,fontSize:12,color:"#dc2626"}}>🔴 Chờ tư vấn · {r.specialty}</span>
+                                  {r.doctorUid===doctor.uid&&<span style={{fontSize:10,color:"#dc2626",marginLeft:6,fontWeight:600}}>(Gửi trực tiếp cho bạn)</span>}
+                                </div>
+                                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                                  <span style={{fontSize:10,color:"#94a3b8"}}>{new Date(r.createdAt).toLocaleDateString("vi-VN")}</span>
+                                  <button onClick={()=>markRequestAnswered(r.id, r.patientUid)}
+                                    style={{padding:"3px 8px",background:"#f0fdf4",color:"#16a34a",border:"1px solid #86efac",borderRadius:6,fontSize:10,cursor:"pointer",fontWeight:700}}>
+                                    ✓ Đánh dấu đã tư vấn
+                                  </button>
+                                </div>
+                              </div>
+                              <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.6}}>{r.message}</div>
+                            </div>
+                          ))}
+                          {answered.map((r,i)=>(
+                            <div key={r.id||i} style={{background:"#f0fdf4",border:"1px solid #86efac",borderLeft:"4px solid #16a34a",borderRadius:10,padding:"10px 14px",marginBottom:8,opacity:0.8}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                <span style={{fontWeight:700,fontSize:12,color:"#15803d"}}>🟢 Đã tư vấn · {r.specialty}</span>
+                                <span style={{fontSize:10,color:"#94a3b8"}}>{new Date(r.createdAt).toLocaleDateString("vi-VN")}</span>
+                              </div>
+                              <div style={{fontSize:12,color:"#166534",marginTop:4}}>{r.message.slice(0,80)}...</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
                     {/* Lịch sử tư vấn */}
-                    <div style={{marginBottom:16}}>
+                    <div style={{marginBottom:10}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:"0.05em"}}>Lịch sử tư vấn đã gửi ({consults.length})</div>
                       {consults.length===0
-                        ? <div style={{textAlign:"center",padding:24,color:"#94a3b8",fontSize:13}}>Chưa có tư vấn nào. Hãy gửi nhận xét đầu tiên.</div>
+                        ? <div style={{textAlign:"center",padding:24,color:"#94a3b8",fontSize:13,background:"#f8fafc",borderRadius:10}}>Chưa có tư vấn nào.</div>
                         : [...consults].reverse().map((c,i)=>(
-                          <div key={c.id||i} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 14px",marginBottom:10}}>
-                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                          <div key={c.id||i} style={{background:"white",border:"1px solid #bfdbfe",borderLeft:"4px solid #0369a1",borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+                            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,alignItems:"flex-start"}}>
                               <div>
                                 <span style={{fontWeight:700,fontSize:13,color:"#1d4ed8"}}>BS. {c.doctorName}</span>
                                 {c.doctorSpec&&<span style={{fontSize:11,color:"#3b82f6",marginLeft:6}}>· {c.doctorSpec}</span>}
                                 {c.doctorWork&&<span style={{fontSize:11,color:"#64748b",marginLeft:6}}>· {c.doctorWork}</span>}
                               </div>
-                              <span style={{fontSize:10,color:"#94a3b8"}}>{new Date(c.createdAt).toLocaleString("vi-VN")}</span>
+                              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                                <button onClick={()=>exportConsultPDF(c.message)}
+                                  style={{padding:"3px 8px",background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca",borderRadius:6,fontSize:10,cursor:"pointer",fontWeight:600}}>
+                                  📄 PDF
+                                </button>
+                                <span style={{fontSize:10,color:"#94a3b8"}}>{new Date(c.createdAt).toLocaleString("vi-VN")}</span>
+                              </div>
                             </div>
-                            <div style={{fontSize:13,color:"#1e3a5f",lineHeight:1.7,whiteSpace:"pre-line"}}>{c.message}</div>
+                            <div style={{fontSize:12,color:"#1e3a5f",lineHeight:1.7,whiteSpace:"pre-line",maxHeight:150,overflowY:"auto"}}>{c.message}</div>
                           </div>
                         ))
                       }
                     </div>
-                    {/* Form gửi tư vấn mới */}
-                    <div style={{background:"white",border:"1px solid #bfdbfe",borderRadius:12,padding:14}}>
-                      <div style={{fontSize:12,fontWeight:700,color:"#0369a1",marginBottom:8}}>💬 Gửi nhận xét / tư vấn mới</div>
-                      <textarea value={newMsg} onChange={e=>setNewMsg(e.target.value)}
-                        placeholder={"Nhập nhận xét, tư vấn, hoặc chỉ định theo dõi...\n\nVD: Dựa trên kết quả siêu âm ngày 6/2025, tình trạng hở van conduit cần được theo dõi sát. Khuyến nghị tái khám mỗi 3 tháng, kiểm tra áp lực TP bằng Doppler..."}
-                        style={{width:"100%",minHeight:120,padding:"10px 12px",border:"1.5px solid #dbeafe",borderRadius:9,fontSize:13,
-                          fontFamily:"system-ui",lineHeight:1.6,resize:"vertical",outline:"none",boxSizing:"border-box",color:"#0f172a"}}/>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-                        <div style={{fontSize:11,color:"#64748b"}}>Ký tên: <strong>BS. {doctor.fullName}</strong> · {doctor.specialty} · {doctor.workplace}</div>
-                        <button onClick={sendConsult} disabled={!newMsg.trim()||saving}
-                          style={{padding:"8px 20px",background:newMsg.trim()?"linear-gradient(135deg,#0369a1,#0284c7)":"#e2e8f0",
-                            color:newMsg.trim()?"white":"#94a3b8",border:"none",borderRadius:9,fontSize:13,fontWeight:700,
-                            cursor:newMsg.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",gap:6}}>
-                          {savedOk?"✅ Đã lưu":saving?"⏳ Đang lưu...":"📤 Gửi tư vấn"}
-                        </button>
+
+                    {/* Soạn thủ công */}
+                    {!draftEditing&&(
+                      <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,padding:14}}>
+                        <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:8}}>✏️ Hoặc soạn tư vấn thủ công</div>
+                        <textarea value={newMsg} onChange={e=>setNewMsg(e.target.value)}
+                          placeholder="Nhập nhận xét, tư vấn thủ công..."
+                          style={{width:"100%",minHeight:80,padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,
+                            fontFamily:"system-ui",lineHeight:1.6,resize:"vertical",outline:"none",boxSizing:"border-box",color:"#0f172a"}}/>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                          <div style={{fontSize:11,color:"#94a3b8"}}>BS. {doctor.fullName} · {doctor.specialty}</div>
+                          <button onClick={sendConsult} disabled={!newMsg.trim()||saving}
+                            style={{padding:"7px 16px",background:newMsg.trim()?"#0369a1":"#e2e8f0",
+                              color:newMsg.trim()?"white":"#94a3b8",border:"none",borderRadius:8,fontSize:12,fontWeight:700,
+                              cursor:newMsg.trim()?"pointer":"not-allowed"}}>
+                            {savedOk?"✅ Đã lưu":saving?"...":"📤 Gửi"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -3750,31 +4377,160 @@ const DoctorApp = ({doctor, onLogout}) => {
   );
 };
 
-// ── ConsultPage — bệnh nhân xem tư vấn từ bác sĩ ────────────
+// ── ConsultPage — bệnh nhân xem tư vấn + gửi yêu cầu ────────
+const SPECIALTIES = ["Tim mạch","Nhi khoa","Nội tổng quát","Ngoại khoa","Thần kinh","Hô hấp","Tiêu hóa","Cơ xương khớp","Da liễu","Mắt","Tai mũi họng","Sản phụ khoa","Ung bướu","Nội tiết","Thận - Tiết niệu","Tâm thần","Phục hồi chức năng","Dinh dưỡng"];
+
 const ConsultPage = ({currentUser, profile}) => {
   const uid = currentUser?.uid;
-  const consults = uid ? loadConsultsFromLS(uid) : [];
-  const fmt = d => d ? new Date(d).toLocaleString("vi-VN") : "—";
+  const [consults,  setConsults]  = React.useState(uid ? loadConsultsFromLS(uid) : []);
+  const [requests,  setRequests]  = React.useState(uid ? loadRequestsFromLS(uid) : []);
+  const [showForm,  setShowForm]  = React.useState(false);
+  const [selDoctor, setSelDoctor] = React.useState("");
+  const [selSpec,   setSelSpec]   = React.useState("");
+  const [msg,       setMsg]       = React.useState("");
+  const [sent,      setSent]      = React.useState(false);
+  const fmt  = d => d ? new Date(d).toLocaleString("vi-VN") : "—";
+  const fmtD = d => d ? new Date(d).toLocaleDateString("vi-VN") : "—";
+
+  const activeDoctors = Object.values(DOCTOR_DB).filter(d=>d.status==="active");
+
+  const sendRequest = () => {
+    if (!msg.trim()) return;
+    const req = {
+      id: "req_"+Date.now(),
+      patientUid: uid,
+      patientName: profile?.fullName || currentUser?.displayName || "?",
+      specialty: selSpec,
+      doctorUid: selDoctor||null,
+      message: msg.trim(),
+      status: "pending", // pending | answered
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...requests, req];
+    setRequests(updated);
+    saveRequestsToLS(uid, updated);
+    setMsg(""); setSelDoctor(""); setSelSpec(""); setShowForm(false); setSent(true);
+    setTimeout(()=>setSent(false), 3000);
+  };
+
+  // Reload khi mount
+  React.useEffect(()=>{
+    if(uid){ setConsults(loadConsultsFromLS(uid)); setRequests(loadRequestsFromLS(uid)); }
+  },[uid]);
+
+  const pendingReqs = requests.filter(r=>r.status==="pending");
+  const answeredReqs = requests.filter(r=>r.status==="answered");
 
   return (
-    <div style={{padding:"24px",maxWidth:760}}>
-      <div style={{marginBottom:20}}>
-        <h1 style={{fontSize:22,fontWeight:800,margin:"0 0 4px",color:"#0f172a"}}>👨‍⚕️ Tư vấn từ Bác sĩ</h1>
-        <p style={{fontSize:13,color:"#64748b",margin:0}}>Nhận xét và hướng dẫn từ bác sĩ gia đình / bác sĩ bệnh viện</p>
+    <div style={{padding:"20px 24px",maxWidth:780}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+        <div>
+          <h1 style={{fontSize:20,fontWeight:800,margin:"0 0 4px",color:"#0f172a"}}>👨‍⚕️ Tư vấn Bác sĩ</h1>
+          <p style={{fontSize:12,color:"#64748b",margin:0}}>Gửi yêu cầu tư vấn và xem phản hồi từ bác sĩ</p>
+        </div>
+        <button onClick={()=>setShowForm(f=>!f)}
+          style={{padding:"9px 18px",background:"linear-gradient(135deg,#0369a1,#0284c7)",color:"white",
+            border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",
+            boxShadow:"0 4px 12px rgba(3,105,161,0.3)"}}>
+          {showForm?"✕ Đóng":"📋 Yêu cầu tư vấn"}
+        </button>
       </div>
 
-      {consults.length === 0 ? (
-        <div style={{background:"#f0f9ff",border:"2px dashed #bae6fd",borderRadius:16,padding:"48px 32px",textAlign:"center"}}>
-          <div style={{fontSize:52,marginBottom:12}}>💬</div>
-          <div style={{fontSize:16,fontWeight:700,color:"#0369a1",marginBottom:8}}>Chưa có tư vấn nào</div>
-          <div style={{fontSize:13,color:"#64748b",lineHeight:1.7}}>
-            Khi bác sĩ gửi nhận xét hoặc tư vấn về hồ sơ của bạn,<br/>nội dung sẽ hiển thị tại đây.
+      {sent&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#166534",fontWeight:600}}>✅ Yêu cầu tư vấn đã gửi thành công! Bác sĩ sẽ phản hồi sớm.</div>}
+
+      {/* Form yêu cầu tư vấn */}
+      {showForm&&(
+        <div style={{background:"white",border:"2px solid #0369a1",borderRadius:14,padding:18,marginBottom:20}}>
+          <div style={{fontWeight:800,fontSize:14,color:"#0c4a6e",marginBottom:14}}>📋 Gửi Yêu Cầu Tư Vấn</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#374151",display:"block",marginBottom:3}}>Chuyên khoa cần tư vấn <span style={{color:"#dc2626"}}>*</span></label>
+              <select value={selSpec} onChange={e=>setSelSpec(e.target.value)}
+                style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:12,outline:"none",background:"white"}}>
+                <option value="">-- Chọn chuyên khoa --</option>
+                {SPECIALTIES.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#374151",display:"block",marginBottom:3}}>Chọn bác sĩ (tùy chọn)</label>
+              <select value={selDoctor} onChange={e=>setSelDoctor(e.target.value)}
+                style={{width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:12,outline:"none",background:"white"}}>
+                <option value="">-- Bất kỳ bác sĩ nào --</option>
+                {activeDoctors.map(d=><option key={d.uid} value={d.uid}>BS. {d.fullName} · {d.specialty||"Đa khoa"}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:11,fontWeight:700,color:"#374151",display:"block",marginBottom:3}}>Mô tả tình trạng / câu hỏi <span style={{color:"#dc2626"}}>*</span></label>
+            <textarea value={msg} onChange={e=>setMsg(e.target.value)}
+              placeholder="VD: Bé hay bị khó thở khi gắng sức, tim đập nhanh. Siêu âm tim gần nhất thấy hở van. Xin bác sĩ tư vấn thêm về tình trạng này và cần theo dõi gì..."
+              style={{width:"100%",minHeight:90,padding:"9px 12px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:12,
+                lineHeight:1.6,resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button onClick={()=>setShowForm(false)}
+              style={{padding:"8px 16px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>Huỷ</button>
+            <button onClick={sendRequest} disabled={!msg.trim()||!selSpec}
+              style={{padding:"8px 18px",background:(msg.trim()&&selSpec)?"linear-gradient(135deg,#0369a1,#0284c7)":"#e2e8f0",
+                color:(msg.trim()&&selSpec)?"white":"#94a3b8",border:"none",borderRadius:8,fontSize:13,fontWeight:700,
+                cursor:(msg.trim()&&selSpec)?"pointer":"not-allowed"}}>
+              📤 Gửi yêu cầu
+            </button>
           </div>
         </div>
-      ) : (
-        <div>
-          <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>{consults.length} tư vấn đã nhận</div>
-          {[...consults].reverse().map((c,i)=>(
+      )}
+
+      {/* Yêu cầu đang chờ */}
+      {pendingReqs.length>0&&(
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#dc2626",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:8}}>
+            🔴 Đang chờ tư vấn ({pendingReqs.length})
+          </div>
+          {[...pendingReqs].reverse().map((r,i)=>(
+            <div key={r.id||i} style={{background:"#fff5f5",border:"1.5px solid #fca5a5",borderLeft:"4px solid #dc2626",borderRadius:10,padding:"12px 14px",marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <span style={{fontWeight:700,fontSize:12,color:"#dc2626"}}>🔴 Chờ phản hồi · {r.specialty}</span>
+                <span style={{fontSize:10,color:"#94a3b8"}}>{fmtD(r.createdAt)}</span>
+              </div>
+              {r.doctorUid&&DOCTOR_DB[r.doctorUid]&&<div style={{fontSize:11,color:"#64748b",marginBottom:4}}>Gửi đến: BS. {DOCTOR_DB[r.doctorUid].fullName}</div>}
+              <div style={{fontSize:12,color:"#7f1d1d",lineHeight:1.6}}>{r.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Yêu cầu đã được tư vấn */}
+      {answeredReqs.length>0&&(
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#166534",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:8}}>
+            🟢 Đã được tư vấn ({answeredReqs.length})
+          </div>
+          {[...answeredReqs].reverse().map((r,i)=>(
+            <div key={r.id||i} style={{background:"#f0fdf4",border:"1.5px solid #86efac",borderLeft:"4px solid #16a34a",borderRadius:10,padding:"10px 14px",marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <span style={{fontWeight:700,fontSize:12,color:"#15803d"}}>🟢 Đã tư vấn · {r.specialty}</span>
+                <span style={{fontSize:10,color:"#94a3b8"}}>{fmtD(r.createdAt)}</span>
+              </div>
+              <div style={{fontSize:12,color:"#166534",lineHeight:1.6}}>{r.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tư vấn từ bác sĩ */}
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:"#0369a1",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:10}}>
+          💬 Thư tư vấn từ bác sĩ ({consults.length})
+        </div>
+        {consults.length===0?(
+          <div style={{background:"#f8fafc",border:"2px dashed #e2e8f0",borderRadius:14,padding:"36px 24px",textAlign:"center"}}>
+            <div style={{fontSize:40,marginBottom:10}}>💬</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#64748b",marginBottom:6}}>Chưa có thư tư vấn</div>
+            <div style={{fontSize:12,color:"#94a3b8"}}>Bác sĩ sẽ gửi thư tư vấn sau khi xem hồ sơ của bạn</div>
+          </div>
+        ):(
+          [...consults].reverse().map((c,i)=>(
             <div key={c.id||i} style={{background:"white",border:"1px solid #bfdbfe",borderLeft:"4px solid #0369a1",borderRadius:12,padding:"16px 18px",marginBottom:14,boxShadow:"0 2px 8px rgba(3,105,161,0.08)"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                 <div>
@@ -3790,9 +4546,9 @@ const ConsultPage = ({currentUser, profile}) => {
                 {c.message}
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 };
@@ -3817,6 +4573,17 @@ const LS_PREFIX = "phr_user_";   // key: phr_user_{uid}
 const LS_INDEX  = "phr_user_index"; // danh sách uid đã lưu
 
 // Khôi phục tất cả user đã đăng ký từ localStorage khi app khởi động
+// Load từ Firebase khi ready
+window.addEventListener("firebase-ready", function() {
+  loadAllFromFirebase().then(ok => {
+    if (ok) {
+      // Trigger re-render bằng cách dispatch custom event
+      window.dispatchEvent(new Event("firebase-data-loaded"));
+      console.log("✅ Firebase data synced to app");
+    }
+  });
+});
+
 (function restoreUsersFromLS() {
   try {
     // Xóa bất kỳ entry LS nào của demo Bình An (không bao giờ lưu)
@@ -3854,10 +4621,11 @@ const saveUserToLS = (uid, user, data) => {
   try {
     const payload = JSON.stringify({user, data});
     localStorage.setItem(LS_PREFIX+uid, payload);
-    // Cập nhật index
     const index = JSON.parse(localStorage.getItem(LS_INDEX)||"[]");
     if (!index.includes(uid)) { index.push(uid); localStorage.setItem(LS_INDEX, JSON.stringify(index)); }
   } catch(e) {}
+  // Sync to Firebase
+  saveUserToFirebase(uid, user, data);
 };
 
 // Xóa user khỏi localStorage
@@ -3867,6 +4635,9 @@ const removeUserFromLS = (uid) => {
     const index = JSON.parse(localStorage.getItem(LS_INDEX)||"[]");
     localStorage.setItem(LS_INDEX, JSON.stringify(index.filter(x=>x!==uid)));
   } catch(e) {}
+  fsDel("users", uid);
+  fsDel("consults", uid);
+  fsDel("requests", uid);
 };
 
 // Đếm số user thật (không kể DEMO + ADMIN)
@@ -4088,11 +4859,13 @@ const DoctorsAdminTab = () => {
 
   const doApprove = (uid) => {
     DOCTOR_DB[uid] = {...DOCTOR_DB[uid], status:"active"};
+    saveDoctorToFirebase(DOCTOR_DB[uid]);
     saveDoctorToLS(DOCTOR_DB[uid]);
     refresh();
   };
   const doBan = (uid) => {
     DOCTOR_DB[uid] = {...DOCTOR_DB[uid], status:"banned"};
+    saveDoctorToFirebase(DOCTOR_DB[uid]);
     saveDoctorToLS(DOCTOR_DB[uid]);
     refresh();
   };
@@ -6137,7 +6910,40 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+// ── Sync Status Indicator ───────────────────────────────────
+const SyncIndicator = () => {
+  const [syncing, setSyncing] = React.useState(false);
+  const [lastSync, setLastSync] = React.useState(null);
+  React.useEffect(() => {
+    window._syncStatus = (isSyncing) => {
+      setSyncing(isSyncing);
+      if (!isSyncing) setLastSync(new Date());
+    };
+    window.addEventListener("firebase-data-loaded", () => setLastSync(new Date()));
+  }, []);
+  if (!syncing && !lastSync) return null;
+  return (
+    <div style={{position:"fixed",bottom:16,right:16,zIndex:9999,
+      background:syncing?"#1d4ed8":"#16a34a",color:"white",
+      padding:"6px 14px",borderRadius:20,fontSize:11,fontWeight:600,
+      boxShadow:"0 4px 12px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:6}}>
+      {syncing
+        ? <><span style={{display:"inline-block",animation:"spin 1s linear infinite"}}>🔄</span> Đang đồng bộ...</>
+        : <>☁️ Đã lưu lên cloud {lastSync&&new Date(lastSync).toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"})}</>
+      }
+    </div>
+  );
+};
+
+// Wrap App với SyncIndicator
+const AppWithSync = () => (
+  <>
+    <App/>
+    <SyncIndicator/>
+  </>
+);
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AppWithSync/>);
 </script>
 </body>
 </html>
